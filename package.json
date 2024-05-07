@@ -71,7 +71,6 @@
     "typescript": "^5.4.5"
   },
   "dependencies": {
-    "typepki-asn1gen": "^0.1.0",
-    "typepki-webcrypto": "file:typepki-webcrypto-0.1.0.tgz"
+    "typepki-asn1gen": "^0.1.0"
   }
 }
