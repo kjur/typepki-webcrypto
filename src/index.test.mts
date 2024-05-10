@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { hashhex, hashutf8, hashrstr, importPEM, signHex, verifyHex, sigAlgToHashAlg, sigRStoASN1, getSecureRandom, getNewHMACKey, getHMACKey, signHMACHex, verifyHMACHex } from "./index.mts";
+import { hashhex, hashutf8, hashrstr, importPEM, signHex, verifyHex, sigAlgToHashAlg, sigRStoASN1, getSecureRandom, getNewHMACKey, getHMACKey, signHMACHex, verifyHMACHex, generateKeypairPEM, generateKeypairJWK } from "./index.mts";
 
 // == hash test ==========
 const AAA256 = "9834876dcfb05cb167a5c24953eba58c4ac89b1adf57f28f2f9d09af107ee8f0"; // =SHA256("aaa")
@@ -408,5 +408,34 @@ const SIGOSSHS384 = "77223e196e2d541713f441134fa686cf415b4715d627613d03e507b66af
 // rfc9500testkey/aaa.txt.hs512.k1.sig
 const SIGOSSHS512 = "b39b8e2995ee35136bc874a95b8320cc1eca9f0d093ef12a2d6b72e796ed65589468ef4793bf77782c8be4e94042e8e676af91bda8d38dcab492046877e9890d";
 
+describe("generateKeypairPEM", async () => {
+  test("RSA (default)", async () => {
+    const kp = await generateKeypairPEM("RSA");
+    expect(kp[0]).toMatch(/BEGIN PRIVATE KEY/);
+    expect(kp[1]).toMatch(/BEGIN PUBLIC KEY/);
+  });
+  test("EC P-521", async () => {
+    const kp = await generateKeypairPEM("EC", "P-521");
+    expect(kp[0]).toMatch(/BEGIN PRIVATE KEY/);
+    expect(kp[1]).toMatch(/BEGIN PUBLIC KEY/);
+  });
+});
 
-
+describe("generateKeypairJWK", async () => {
+  test("RSA (default)", async () => {
+    const kp = await generateKeypairJWK("RSA");
+    expect(kp[0].kty).toBe("RSA");
+    expect(kp[0].e).toBe("AQAB");
+    expect(typeof kp[0].d).toBe("string");
+    expect(kp[1].kty).toBe("RSA");
+    expect(kp[1].e).toBe("AQAB");
+  });
+  test("EC P-521", async () => {
+    const kp = await generateKeypairJWK("EC", "P-521");
+    expect(kp[0].kty).toBe("EC");
+    expect(kp[0].crv).toBe("P-521");
+    expect(typeof kp[0].d).toBe("string");
+    expect(kp[1].kty).toBe("EC");
+    expect(kp[1].crv).toBe("P-521");
+  });
+});

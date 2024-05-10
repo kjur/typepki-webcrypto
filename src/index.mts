@@ -1,4 +1,4 @@
-import { hextoBA, rstrtohex, utf8tohex, ArrayBuffertohex, hextoArrayBuffer, pemtohex, ishex } from "typepki-strconv";
+import { hextoBA, rstrtohex, utf8tohex, ArrayBuffertohex, hextoArrayBuffer, pemtohex, ishex, hextopem } from "typepki-strconv";
 import { pospad, getASN1 } from "typepki-asn1gen";
 
 
@@ -369,6 +369,109 @@ export async function verifyHMACHex(alg: string, key: string | CryptoKey, hSig: 
     hextoArrayBuffer(hData)
   );
   return result;
+}
+
+/**
+ * generate keypair as PEM keys
+ * @param alg - key algorithm (RSA or EC)
+ * @param opt1 - RSA key length or EC curve name (P-{256,384,512}) RSA key length default is 2048 and EC curve name default is "P-256"
+ * @param opt2 - RSA public exponent as hexadecimal string. The default is "010001" (i.e. 65537)
+ * @return Array of private key PEM and public key PEM
+ * @see {@link generateKeypairJWK}
+ * @description
+ * This function generates a RFC 7517 JSON Web Key (JWK) RSA
+ * or EC key pair by W3C Web Crypto API.
+ * @example
+ * await generateKeyPairPEM("RSA") ->
+ * ["-----BEGIN PRIVATE...", "-----BEGIN PUBLIC..."] // RSA 2048bit and "010001" public exponent
+ * await generateKeyPairPEM("RSA", 4096, "0101") ->
+ * ["-----BEGIN PRIVATE...", "-----BEGIN PUBLIC..."] // RSA 4096bit and "0101" public exponent
+ * await generateKeyPairPEM("EC") ->
+ * ["-----BEGIN PRIVATE...", "-----BEGIN PUBLIC..."] // P-256 as default
+ * await generateKeyPairPEM("EC", "P-521") ->
+ * ["-----BEGIN PRIVATE...", "-----BEGIN PUBLIC..."] // P-521
+ */
+export async function generateKeypairPEM(alg: "RSA" | "EC", opt1?: string | number, opt2?: string): Promise<string[]> {
+  const kp: CryptoKeyPair = await generateKeypairObj(alg, opt1, opt2) as CryptoKeyPair;
+  //console.log(kp); 
+  const prvab = await crypto.subtle.exportKey("pkcs8", kp.privateKey as CryptoKey);
+  const pubab = await crypto.subtle.exportKey("spki", kp.publicKey as CryptoKey);
+  const prvpem = hextopem(ArrayBuffertohex(prvab), "PRIVATE KEY", "\n");
+  const pubpem = hextopem(ArrayBuffertohex(pubab), "PUBLIC KEY", "\n");
+  const result: Array<string> = [prvpem, pubpem];
+  //console.log(result);
+  return result;
+}
+
+/**
+ * generate keypair as JWK keys
+ * @param alg - key algorithm (RSA or EC)
+ * @param opt1 - RSA key length or EC curve name (P-{256,384,512}) RSA key length default is 2048 and EC curve name default is "P-256"
+ * @param opt2 - RSA public exponent as hexadecimal string. The default is "010001" (i.e. 65537)
+ * @return Array of private key JWK and public key JWK.
+ * @see {@link generateKeypairPEM}
+ * @see https://www.rfc-editor.org/rfc/rfc7517
+ * @description
+ * This function generates a RFC 7517 JSON Web Key (JWK) RSA
+ * or EC key pair by W3C Web Crypto API.
+ * @example
+ * await generateKeyPairJWK("EC") -> [{
+ *   kty: "EC",
+ *   crv: "P-256"
+ *   d: "..."
+ *   ...
+ * },{
+ *   kty: "EC",
+ *   crv: "P-256"
+ *   x: "...",
+ *   y: "...",
+ * }]
+ */
+export async function generateKeypairJWK(alg: "RSA" | "EC", opt1?: string | number, opt2?: string): Promise<object[]> {
+  const kp: CryptoKeyPair = await generateKeypairObj(alg, opt1, opt2) as CryptoKeyPair;
+  const prvjwk = await crypto.subtle.exportKey("jwk", kp.privateKey as CryptoKey);
+  const pubjwk = await crypto.subtle.exportKey("jwk", kp.publicKey as CryptoKey);
+  delete prvjwk.alg;
+  delete prvjwk.ext;
+  delete prvjwk.key_ops;
+  delete pubjwk.alg;
+  delete pubjwk.ext;
+  delete pubjwk.key_ops;
+  const result = [prvjwk, pubjwk];
+  //console.log(result);
+  return result;
+}
+
+async function generateKeypairObj(alg: "RSA" | "EC", opt1?: string | number, opt2?: string): Promise<CryptoKeyPair> {
+  let kp: CryptoKeyPair;
+  if (alg == "RSA") {
+    const keylen = (opt1 !== undefined) ? opt1 : 2048;
+    const pubexpHex = (opt2 !== undefined) ? opt2 : "010001";
+    const pubexpU8a = new Uint8Array(hextoArrayBuffer(pubexpHex));
+    kp = await crypto.subtle.generateKey(
+      {
+        "name": "RSASSA-PKCS1-v1_5",
+        "modulusLength": keylen,
+        "publicExponent": pubexpU8a,
+        "hash": "SHA-256"
+      } as RsaHashedKeyGenParams,
+      true,
+      ["sign", "verify"]
+    );
+  } else if (alg == "EC") {
+    const curve = (opt1 !== undefined) ? opt1 : "P-256";
+    kp = await crypto.subtle.generateKey(
+      {
+        "name": "ECDSA",
+        "namedCurve": opt1
+      } as EcKeyGenParams,
+      true,
+      ["sign", "verify"]
+    );
+  } else {
+    throw new Error("error");
+  }
+  return kp;
 }
 
 /*
