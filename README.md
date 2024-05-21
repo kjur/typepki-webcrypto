@@ -27,11 +27,14 @@ MI...
   const hexSignatureValue = await signHex("SHA256withRSA", privateKey, utf8tohex("apple りんご"));
 })();
 ```
-The [typepki-strconv] provide many functions convert any data to a hexadecimal string such as
-ArrayBuffer, Base64, Base64URL or raw string.
+The [typepki-strconv](https://kjur.github.io/typepki-webcrypto/) provide many functions convert any data to a hexadecimal string such as
+[ArrayBuffer](https://kjur.github.io/typepki-strconv/functions/ArrayBuffertohex.html), [Base64](https://kjur.github.io/typepki-strconv/functions/b64tohex.html), [Base64URL](https://kjur.github.io/typepki-strconv/functions/b64utohex.html) or [raw string](https://kjur.github.io/typepki-strconv/functions/rstrtohex.html).
 
 ## Signature Verification
 The {@link verifyHex} function can verify a RSA, RSA-PSS and ECDSA signature very easily too.
+
+### RSA signature verification
+Here is an example to verify a RSA signature for a string "apple りんご":
 ```JavaScript
 const pemPublicKey = `-----BEGIN PUBLIC KEY-----
 MI...
