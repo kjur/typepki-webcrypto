@@ -7,7 +7,40 @@ The 'typepki-webcrypto' is W3C Web Crypto API [[1]](https://developer.mozilla.or
 
 ## FEATURE
 - easy use for
-  - keypair generation
+  - keypair/key generation
   - key import
-  - key export
+  - signing and verification
+  - PEM key format
 - Dual CommonJS/ES module package supporting CommonJS(CJS) and ES modules
+
+## Signing
+The {@link signHex} function can sign a data with RSA, RSA-PSS and ECDSA algorithms very easily.
+
+### RSA signing
+Here is an example to sign a string "apple りんご":
+```JavaScript
+const pemPrivateKey = `-----BEGIN PRIVATE KEY-----
+MI...
+-----END PRIVATE KEY-----`;
+(async () = {
+  const privateKey = await importPEM(pemPrivateKey, "SHA256withRSA");
+  const hexSignatureValue = await signHex("SHA256withRSA", privateKey, utf8tohex("apple りんご"));
+})();
+```
+The [typepki-strconv] provide many functions convert any data to a hexadecimal string such as
+ArrayBuffer, Base64, Base64URL or raw string.
+
+## Signature Verification
+The {@link verifyHex} function can verify a RSA, RSA-PSS and ECDSA signature very easily too.
+```JavaScript
+const pemPublicKey = `-----BEGIN PUBLIC KEY-----
+MI...
+-----END PRIVATE KEY-----`;
+const hexSignature = "12ab...";
+(async () = {
+  const publicKey = await importPEM(pemPublicKey, "SHA256withRSA");
+  const isValid = await verifyHex("SHA256withRSA", publicKey, hexSignature, utf8tohex("apple りんご"));
+})();
+```
+
+

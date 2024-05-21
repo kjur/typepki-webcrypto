@@ -71,6 +71,7 @@
   },
   "dependencies": {
     "typepki-asn1gen": "^0.1.0",
+    "typepki-asn1parse": "^0.1.0",
     "typepki-strconv": "^0.4.0"
   }
 }

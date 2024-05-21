@@ -1,6 +1,6 @@
-import { hextoBA, rstrtohex, utf8tohex, ArrayBuffertohex, hextoArrayBuffer, pemtohex, ishex, hextopem } from "typepki-strconv";
-import { pospad, getASN1 } from "typepki-asn1gen";
-
+import { aryval, hextoBA, rstrtohex, utf8tohex, ArrayBuffertohex, hextoArrayBuffer, pemtohex, ishex, hextopem } from "typepki-strconv";
+import { getASN1, pospad } from "typepki-asn1gen";
+import { asn1parse } from "typepki-asn1parse";
 
 // == hash ===========================
 /**
@@ -219,12 +219,13 @@ export function sigAlgToHashAlg(alg: string): string | null {
  * convert ECDSA signature value from RS concatinated to ASN.1 encoded
  * @param hRS - hexadecimal string of R and S concatinated signature value
  * @return ASN.1 DER encoded ECDSA signature value
+ * @see {@link sigASN1toRS}
  * @description
  * ECDSA signature value has two types of encoding:
  * - R and S value concatinated encoding used in W3C Web Crypto API or JSON Web Signature.
  * - ASN.1 SEQUENCE of INTEGER R and S value used in OpenSSL
  *
- * This function convert a ECDSA signature encoding from 
+ * This function converts a ECDSA signature encoding from 
  * concatinated to ASN.1. This function supports ECDSA signatures by P-256, P-384 and P-521.
  * @example
  * sigRStoASN1("
@@ -251,6 +252,77 @@ export function sigRStoASN1(hRS: string): string {
                ] };
   const hASN1 = getASN1(json);
   return hASN1;
+}
+
+/**
+ * convert ECDSA signature value from ASN.1 encoded to RS concatinated
+ * @param hASN - hexadecimal string of ECDSA ASN.1 signature value
+ * @return R and S concatinated ECDSA signature value
+ * @see {@link sigRStoASN1}
+ * @description
+ * ECDSA signature value has two types of encoding:
+ * - R and S value concatinated encoding used in W3C Web Crypto API or JSON Web Signature.
+ * - ASN.1 SEQUENCE of INTEGER R and S value used in OpenSSL
+ *
+ * This function converts a ECDSA signature encoding from 
+ * ASN.1 to concatinated. This function supports ECDSA signatures by P-256, P-384 and P-521.
+ * @example
+ * sigRStoASN1(
+ * "3044
+ *    0220
+ *      69c3e2489cc23044f91dce1e5efab7a47f8c2a545cdce9b58e408c6a2aabd060
+ *    0220
+ *      76ba3d70771c00451adcf608d93f20cc79ccaf872f42028aa05ff57b14e5959f")
+ * ->
+ * "69c3e2489cc23044f91dce1e5efab7a47f8c2a545cdce9b58e408c6a2aabd060
+ *  76ba3d70771c00451adcf608d93f20cc79ccaf872f42028aa05ff57b14e5959f"
+ */
+export function sigASN1toRS(hASN: string, alg?: string): string {
+  let hR: string;
+  let hS: string;
+  try {
+    const p = asn1parse(hASN);
+    if (aryval(p, "t") === "seq" &&
+        aryval(p, "v.0.t") === "int" &&
+        aryval(p, "v.1.t") === "int") {
+      hR = aryval(p, "v.0.v");
+      hS = aryval(p, "v.1.v");
+    } else {
+      throw new Error("malformed");
+    }
+  } catch (ex) {
+    throw new Error("malformed ASN.1 RS signature");
+  }
+  
+  if (hR.match(/^[8-9a-f]/) || hS.match(/^[8-9a-f]/)) {
+    throw new Error("negative R nor S not supported");
+  }
+
+  if (hR.match(/^00/)) hR = hR.slice(2);
+  if (hS.match(/^00/)) hS = hS.slice(2);
+
+  const n = getRSSigLen(hR, hS, alg);
+  //console.log("n=", n);
+  const zeros = "000000000000000000000000000000";
+  hR = `${zeros}${hR}`.slice(- n);
+  hS = `${zeros}${hS}`.slice(- n);
+  if (hR.length != n || hS.length != n) {
+    throw new Error("too many zero padding");
+  }
+
+  return `${hR}${hS}`;
+}
+
+export function getRSSigLen(hR: string, hS: string, alg?: string) {
+  if (alg === "P-256") return 64;
+  if (alg === "P-384") return 96;
+  if (alg === "p-521") return 132;
+  if (alg !== undefined) throw new Error(`alg not supported: ${alg}`);
+  const rLen = hR.length;
+  const sLen = hS.length;
+  if ((96 < rLen && rLen <= 132) || (96 < sLen && sLen <= 132)) return 132;
+  if ((64 < rLen && rLen <= 96) || (64 < sLen && sLen <= 96)) return 96;
+  return 64;
 }
 
 /**
