@@ -1,6 +1,6 @@
 import { aryval, hextoBA, rstrtohex, utf8tohex, ArrayBuffertohex, hextoArrayBuffer, pemtohex, ishex, hextopem } from "typepki-strconv";
 import { getASN1, pospad } from "typepki-asn1gen";
-import { asn1parse } from "typepki-asn1parse";
+import { asn1parse, dig, asn1oidcanon } from "typepki-asn1parse";
 
 // == hash ===========================
 /**
@@ -9,7 +9,7 @@ import { asn1parse } from "typepki-asn1parse";
  * @param ab - ArrayBuffer value to be hashed
  * @return hexadecimal hash value
  * @example
- * await hashab("SHA-256", hextoArrayBuffer("616161")
+ * await hashab("SHA-256", hextoArrayBuffer("616161"))
  * -> ...
  */
 export async function hashab(alg: string, ab: ArrayBuffer): Promise<string> {
@@ -142,12 +142,20 @@ function getDefaultSaltLength(alg: string) {
  * import key from PEM private/public key string
  * @param pem - PEM PKCS#8 private key or public key string
  * @param alg - signature algorithm (SHA{1,224,256,384,512}with{RSA,RSAandMGF1,ECDSA})
+ * @param sigopt - saltLength for RSA-PSS
  * @return CryptoKey object of W3C Web Crypto API
  * @see https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/importKey
+ *
  * @description
  * This function import a CryptoKey object from PEM key file.
+ * <br/>
+ * NOTE: For EC key, namedCurve value will be automatically
+ * detected by PEM file. So no need to specify.
+ *
  * @example
- * let key = await importPEM("-----BEGIN PRIVATE...", "SHA256withRSA");
+ * key = await importPEM("-----BEGIN PRIVATE...", "SHA256withRSA");
+ * key = await importPEM("-----BEGIN PUBLIC...", "SHA256withECDSA");
+ * key = await importPEM("-----BEGIN PRIVATE...", "SHA256withRSAandMGF1");
  */
 export async function importPEM(pem: string, alg: string, sigopt?: number | string): Promise<CryptoKey> {
   const pemab: ArrayBuffer = hextoArrayBuffer(pemtohex(pem));
@@ -190,9 +198,13 @@ function getImportAlgorithm(pem: string, alg: string, sigopt?: number | string):
       hash: { name: "SHA-" + matchResult[1] }
     } as RsaHashedImportParams;
   } else { // "ECDSA":
+    const curve: string | null = pemtocurve(pem);
+    if (curve == null) {
+      throw new Error("can't find curve name from PEM string");
+    }
     return {
       name: "ECDSA",
-      namedCurve: sigopt
+      namedCurve: curve,
     } as EcKeyImportParams;
   }
 }
@@ -544,6 +556,49 @@ async function generateKeypairObj(alg: "RSA" | "EC", opt1?: string | number, opt
     throw new Error("error");
   }
   return kp;
+}
+
+/**
+ * get curve name from PKCS#8 PEM private/public key string
+ * @param pem - PKCS#8 PEM private or public key string
+ * @return supported EC curve name (P-256/384/521) otherwise returns null
+ * @example
+ * pemtocurve("-----BEGIN PRIVATE...") -> "P-521"
+ * pemtocurve("-----BEGIN PUBLIC...") -> null // if RSA key or not supported curve
+ */
+export function pemtocurve(pem: string): string | null {
+  if (pem.indexOf("-BEGIN PRIVATE KEY-") !== -1) return prvpemtocurve(pem);
+  if (pem.indexOf("-BEGIN PUBLIC KEY-") !== -1) return pubpemtocurve(pem);
+  return null;
+}
+
+function prvpemtocurve(pem: string): string | null {
+  const h = pemtohex(pem);
+  const p = asn1parse(h);
+  const pAlg = dig(p, "seq.1.seq.0.oid") as Record<string, string>;
+  const pCurve = dig(p, "seq.1.seq.1.oid") as Record<string, string>;
+  if (pAlg === undefined || pCurve === undefined) return null;
+  if (asn1oidcanon(pAlg as Record<string, string>) !== "1.2.840.10045.2.1") return null; // not ecPublicKey
+  const curveoid = asn1oidcanon(pCurve as Record<string, string>);
+  return oidtocurve(curveoid);
+}
+
+function pubpemtocurve(pem: string): string | null {
+  const h = pemtohex(pem);
+  const p = asn1parse(h);
+  const pAlg = dig(p, "seq.0.seq.0.oid");
+  const pCurve = dig(p, "seq.0.seq.1.oid");
+  if (pAlg === undefined || pCurve === undefined) return null;
+  if (asn1oidcanon(pAlg as Record<string, string>) !== "1.2.840.10045.2.1") return null; // not ecPublicKey
+  const curveoid = asn1oidcanon(pCurve as Record<string, string>);
+  return oidtocurve(curveoid);
+}
+
+function oidtocurve(oid: string): string | null {
+  if (oid === "1.2.840.10045.3.1.7") return "P-256";
+  if (oid === "1.3.132.0.34") return "P-384";
+  if (oid === "1.3.132.0.35") return "P-521";
+  return null;
 }
 
 /*

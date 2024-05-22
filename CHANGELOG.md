@@ -1,5 +1,15 @@
 # ChangeLog
 
+## [0.3.0] - 2024-05-22
+
+### Added
+
+- function pemtocurve added
+
+### Modified
+
+- importPEM: now no need to specify curve name for EC key
+
 ## [0.1.0] - 2024-05-07
 
 - initial beta release

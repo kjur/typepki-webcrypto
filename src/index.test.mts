@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { hashhex, hashutf8, hashrstr, importPEM, signHex, verifyHex, sigAlgToHashAlg, sigASN1toRS, sigRStoASN1, getSecureRandom, getNewHMACKey, getHMACKey, signHMACHex, verifyHMACHex, generateKeypairPEM, generateKeypairJWK } from "./index.mts";
+import { hashhex, hashutf8, hashrstr, importPEM, signHex, verifyHex, sigAlgToHashAlg, sigASN1toRS, sigRStoASN1, getSecureRandom, getNewHMACKey, getHMACKey, signHMACHex, verifyHMACHex, generateKeypairPEM, generateKeypairJWK, pemtocurve } from "./index.mts";
 
 // == hash test ==========
 const AAA256 = "9834876dcfb05cb167a5c24953eba58c4ac89b1adf57f28f2f9d09af107ee8f0"; // =SHA256("aaa")
@@ -35,7 +35,7 @@ test("signHex", async () => {
   //console.log(sig);
   //expect(true).toEqual(true);  
 
-  //const key2 = await importPEM(PRVECPEM1, "SHA256withECDSA", "P-256");
+  //const key2 = await importPEM(PRVECP2, "SHA256withECDSA");
   //const hSig2 = await signHex("SHA256withECDSA", key2, "616161", "P-256");
   //console.log(hSig2);
 });
@@ -71,21 +71,8 @@ test("importPEM RSA public1 various hash alg SHA-1/224/256/384/512", async () =>
   expect(key.algorithm.hash).toEqual({name:"SHA-512"});
 });
 
-// RFC 9500 test EC P-256 private
-const PRVECPEM1 = `-----BEGIN PRIVATE KEY-----
-MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQg5stb3YCqRa6clejB
-VHZnn/7JU8FoUecR50OTlYnGT8GhRANCAARCJUj4j7eC/7Xso3REUscqHlWPvW9z
-vl5I6TIyzEXFsWxM0QxMuNW4oXE56UiCyJklcpk0JfQUGat+kKQqSUJy
------END PRIVATE KEY-----`;
-
-// RFC 9500 test EC P-256 public
-const PUBECPEM1 = `-----BEGIN PUBLIC KEY-----
-MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEQiVI+I+3gv+17KN0RFLHKh5Vj71v
-c75eSOkyMsxFxbFsTNEMTLjVuKFxOelIgsiZJXKZNCX0FBmrfpCkKklCcg==
------END PUBLIC KEY-----`;
-
 test("importPEM EC P-256 private1", async () => {
-  const key = await importPEM(PRVECPEM1, "SHA256withECDSA", "P-256");
+  const key = await importPEM(PRVECP2, "SHA256withECDSA");
   expect(key.type).toBe("private");
   expect(key.algorithm.name).toBe("ECDSA");
   expect(key.algorithm.namedCurve).toBe("P-256");
@@ -93,7 +80,7 @@ test("importPEM EC P-256 private1", async () => {
 });
 
 test("importPEM EC P-256 public1", async () => {
-  const key = await importPEM(PUBECPEM1, "SHA256withECDSA", "P-256");
+  const key = await importPEM(PUBECP2, "SHA256withECDSA");
   expect(key.type).toBe("public");
   expect(key.algorithm.name).toBe("ECDSA");
   expect(key.algorithm.namedCurve).toBe("P-256");
@@ -120,10 +107,10 @@ test("signHex verifyHex RSA-PSS", async () => {
 
 test("signHex verifyHex EC P-256", async () => {
   const hData = "616161";
-  const prvkey = await importPEM(PRVECPEM1, "SHA256withECDSA", "P-256");
+  const prvkey = await importPEM(PRVECP2, "SHA256withECDSA");
   const hSig = await signHex("SHA256withECDSA", prvkey, hData, "P-256");
 
-  const pubkey = await importPEM(PUBECPEM1, "SHA256withECDSA", "P-256");
+  const pubkey = await importPEM(PUBECP2, "SHA256withECDSA");
   expect(await verifyHex("SHA256withECDSA", pubkey, hSig, hData, "P-256")).toBe(true);
 });
 
@@ -145,7 +132,7 @@ describe("verifyHex jwt.io generated signatures interop", async () => {
     // testecp384.jwtio.es384.*
     const TBSHEX = "65794a68624763694f694a46557a4d344e434973496e523563434936496b705856434a392e65794a7a645749694f6949784d6a4d304e5459334f446b7749697769626d46745a534936496b7076614734675247396c4969776959575274615734694f6e527964575573496d6c68644349364d5455784e6a497a4f5441794d6e30";
     const SIGHEX = "d587d8a67e4f29adfe85c79e9ff0bb1b5428d1c3a19934d651b0fd918a3d33881e85e013859a09c91abeac7aa2ef9ae6ab756c4d0f42c9747c788fb900014ae1e7583fe6f3cb80093e27afae629faa5bb41cf5b11ec5d13dd082af527ba5bd82";
-    const pubE384 = await importPEM(PUBE384, "SHA384withECDSA", "P-384");
+    const pubE384 = await importPEM(PUBE384, "SHA384withECDSA");
     expect(await verifyHex("SHA384withECDSA", pubE384, SIGHEX, TBSHEX, "P-384")).toBe(true);
   });
 });
@@ -164,33 +151,33 @@ describe("verifyHex OpenSSL generated signatures interop", async () => {
     expect(await verifyHex("SHA512withRSA", pubR4096, SIGOSSR4096, AAAHEX)).toBe(true);
   });
   test("SHA1withECDSA P-256", async () => {
-    const pubE256S1 = await importPEM(PUBE256, "SHA1withECDSA", "P-256");
+    const pubE256S1 = await importPEM(PUBE256, "SHA1withECDSA");
     expect(await verifyHex("SHA1withECDSA", pubE256S1, SIGOSSE256S1, AAAHEX, "P-256")).toBe(true);
   });
   test("SHA256withECDSA P-256", async () => {
-    const pubE256 = await importPEM(PUBE256, "SHA256withECDSA", "P-256");
+    const pubE256 = await importPEM(PUBE256, "SHA256withECDSA");
     expect(await verifyHex("SHA256withECDSA", pubE256, SIGOSSE256, AAAHEX, "P-256")).toBe(true);
   });
   test("SHA384withECDSA P-384", async () => {
-    const pubE384 = await importPEM(PUBE384, "SHA384withECDSA", "P-384");
+    const pubE384 = await importPEM(PUBE384, "SHA384withECDSA");
     expect(await verifyHex("SHA384withECDSA", pubE384, SIGOSSE384, AAAHEX, "P-384")).toBe(true);
   });
   test("SHA1withECDSA P-521", async () => {
-    const pubE521S1 = await importPEM(PUBE521, "SHA1withECDSA", "P-521");
+    const pubE521S1 = await importPEM(PUBE521, "SHA1withECDSA");
     expect(await verifyHex("SHA1withECDSA", pubE521S1, SIGOSSE521S1, AAAHEX, "P-521")).toBe(true);
   });
   /*
   test("SHA256withECDSA P-521", async () => {
-    const pubE521S2 = await importPEM(PUBE521, "SHA256withECDSA", "P-521");
+    const pubE521S2 = await importPEM(PUBE521, "SHA256withECDSA");
     expect(await verifyHex("SHA256withECDSA", pubE521S2, SIGOSSE521S2, AAAHEX, "P-521")).toBe(true);
-  }); // エラー
+  }); // TEST FAILED
   test("SHA384withECDSA P-521", async () => {
-    const pubE521S3 = await importPEM(PUBE521, "SHA384withECDSA", "P-521");
+    const pubE521S3 = await importPEM(PUBE521, "SHA384withECDSA");
     expect(await verifyHex("SHA384withECDSA", pubE521S3, SIGOSSE521S3, AAAHEX, "P-521")).toBe(true); // エラー
-  });
+  }); // TEST FAILED
    */
   test("SHA512withECDSA P-521", async () => {
-    const pubE521 = await importPEM(PUBE521, "SHA512withECDSA", "P-521");
+    const pubE521 = await importPEM(PUBE521, "SHA512withECDSA");
     expect(await verifyHex("SHA512withECDSA", pubE521, SIGOSSE521, AAAHEX, "P-521")).toBe(true);
   });
 
@@ -452,3 +439,63 @@ describe("generateKeypairJWK", async () => {
     expect(kp[1].crv).toBe("P-521");
   });
 });
+
+test("pemtocurve", () => {
+  expect(pemtocurve(PRVECP2)).toBe("P-256");
+  expect(pemtocurve(PUBECP2)).toBe("P-256");
+  expect(pemtocurve(PRVECP3)).toBe("P-384");
+  expect(pemtocurve(PUBECP3)).toBe("P-384");
+  expect(pemtocurve(PRVECP5)).toBe("P-521");
+  expect(pemtocurve(PUBECP5)).toBe("P-521");
+  expect(pemtocurve(PRVR1024)).toBe(null);
+  expect(pemtocurve(PUBR1024)).toBe(null);
+  expect(pemtocurve(PUBR2048)).toBe(null);
+});
+
+// == RFC 9500 test keys ==========================================
+
+// RFC 9500 test EC P-256 private PKCS#8 PEM
+const PRVECP2 = `-----BEGIN PRIVATE KEY-----
+MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQg5stb3YCqRa6clejB
+VHZnn/7JU8FoUecR50OTlYnGT8GhRANCAARCJUj4j7eC/7Xso3REUscqHlWPvW9z
+vl5I6TIyzEXFsWxM0QxMuNW4oXE56UiCyJklcpk0JfQUGat+kKQqSUJy
+-----END PRIVATE KEY-----`;
+
+// RFC 9500 test EC P-256 public PKCS#8 PEM
+const PUBECP2 = `-----BEGIN PUBLIC KEY-----
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEQiVI+I+3gv+17KN0RFLHKh5Vj71v
+c75eSOkyMsxFxbFsTNEMTLjVuKFxOelIgsiZJXKZNCX0FBmrfpCkKklCcg==
+-----END PUBLIC KEY-----`;
+
+// RFC 9500 test EC P-384 private PKCS#8 PEM
+const PRVECP3 = `-----BEGIN PRIVATE KEY-----
+MIG2AgEAMBAGByqGSM49AgEGBSuBBAAiBIGeMIGbAgEBBDDiVjMo36v2gYhga5Ey
+QoHB1YpEVkMbCdUQs1/syfMHyhgihG+iZxNxqagbrA41dJ2hZANiAARbCQG4hSMp
+brkZ1Q/6GpyzdLxNQJWGKCv+yhGx2VrbtUc0r1cL+CtyKM8ia89MJd28/jsaOtOU
+MO/3Y+HWjS4VHZFyC3eVtY2ms0Y5YTqPubWo2kjGdHEX+ZGehCTzfsg=
+-----END PRIVATE KEY-----`;
+
+// RFC 9500 test EC P-384 public PKCS#8 PEM
+const PUBECP3 = `-----BEGIN PUBLIC KEY-----
+MHYwEAYHKoZIzj0CAQYFK4EEACIDYgAEWwkBuIUjKW65GdUP+hqcs3S8TUCVhigr
+/soRsdla27VHNK9XC/grcijPImvPTCXdvP47GjrTlDDv92Ph1o0uFR2Rcgt3lbWN
+prNGOWE6j7m1qNpIxnRxF/mRnoQk837I
+-----END PUBLIC KEY-----`;
+
+// RFC 9500 test EC P-521 private PKCS#8 PEM
+const PRVECP5 = `-----BEGIN PRIVATE KEY-----
+MIHuAgEAMBAGByqGSM49AgEGBSuBBAAjBIHWMIHTAgEBBEIB2STcygqIf42Zdno3
+2HTmN6Esy0d9bghmU1ZpTWi3ZV5QaWOP3ntFyFQBPcd6NbGGVbhMlmpgIg1A+R7Z
+9RRYAuqhgYkDgYYABAHQ/XJXqEx0f1YldcBzhdvr8vUr6lgIPbgv3RUx2KrjzIdf
+8C/3+i2iYNjrYtbS9dZJJ44yFzagYoy7swMItuYY2wD2KtIExkYDWbyBiriWG/Dw
+/A7FquikKBc85W8A3psVfB5cgsZPVi/K3vxKTCj200LPPvYW/ILTO3KFySHyvzb9
+2A==
+-----END PRIVATE KEY-----`;
+
+// RFC 9500 test EC P-521 public PKCS#8 PEM
+const PUBECP5 = `-----BEGIN PUBLIC KEY-----
+MIGbMBAGByqGSM49AgEGBSuBBAAjA4GGAAQB0P1yV6hMdH9WJXXAc4Xb6/L1K+pY
+CD24L90VMdiq48yHX/Av9/otomDY62LW0vXWSSeOMhc2oGKMu7MDCLbmGNsA9irS
+BMZGA1m8gYq4lhvw8PwOxaropCgXPOVvAN6bFXweXILGT1Yvyt78Skwo9tNCzz72
+FvyC0ztyhckh8r82/dg=`;
+

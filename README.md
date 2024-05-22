@@ -27,7 +27,7 @@ MI...
   const hexSignatureValue = await signHex("SHA256withRSA", privateKey, utf8tohex("apple りんご"));
 })();
 ```
-The [typepki-strconv](https://kjur.github.io/typepki-webcrypto/) provide many functions convert any data to a hexadecimal string such as
+The [typepki-strconv](https://kjur.github.io/typepki-webcrypto/) provides many functions convert any data to a hexadecimal string such as
 [ArrayBuffer](https://kjur.github.io/typepki-strconv/functions/ArrayBuffertohex.html), [Base64](https://kjur.github.io/typepki-strconv/functions/b64tohex.html), [Base64URL](https://kjur.github.io/typepki-strconv/functions/b64utohex.html) or [raw string](https://kjur.github.io/typepki-strconv/functions/rstrtohex.html).
 
 ## Signature Verification
