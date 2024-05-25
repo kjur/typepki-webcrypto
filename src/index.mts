@@ -76,7 +76,7 @@ export async function hashrstr(alg: string, rstr: string): Promise<string> {
  */
 export async function signHex(
   sigalg: SignatureAlgorithmName,
-  keyobjOrString: CryptoKey, 
+  keyobjOrString: CryptoKey | string, 
   hData: string,
   saltlen?: number
 ): Promise<string> {
@@ -100,7 +100,7 @@ export async function signHex(
  */
 export async function signBuf(
   sigalg: SignatureAlgorithmName,
-  keyobjOrString: CryptoKey, 
+  keyobjOrString: CryptoKey | string, 
   bufData: ArrayBuffer | Uint8Array | DataView,
   saltlen?: number
 ): Promise<ArrayBuffer> {
@@ -176,7 +176,7 @@ export async function signBuf(
  */
 export async function verifyHex(
   sigalg: SignatureAlgorithmName,
-  keyobjOrString: CryptoKey, 
+  keyobjOrString: CryptoKey | string, 
   hSig: string,
   hData: string,
   saltlen?: number
