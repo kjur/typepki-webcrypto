@@ -2,6 +2,12 @@ import { aryval, hextoBA, rstrtohex, utf8tohex, ArrayBuffertohex, hextoArrayBuff
 import { getASN1, pospad } from "typepki-asn1gen";
 import { asn1parse, dig, asn1oidcanon } from "typepki-asn1parse";
 
+export type SignatureAlgorithmName = 
+  "hmacSHA1" | "hmacSHA256" | "hmacSHA384" | "hmacSHA512" |
+  "SHA1withRSA" | "SHA256withRSA" | "SHA384withRSA" | "SHA512withRSA" |
+  "SHA1withECDSA" | "SHA256withECDSA" | "SHA384withECDSA" | "SHA512withECDSA" |
+  "SHA1withRSAandMGF1" | "SHA256withRSAandMGF1" | "SHA384withRSAandMGF1" | "SHA512withRSAandMGF1";
+
 // == hash ===========================
 /**
  * get hexadecimal hash value of ArrayBuffer with specified hash algorithm
@@ -57,69 +63,204 @@ export async function hashrstr(alg: string, rstr: string): Promise<string> {
 
 /**
  * sign hexadecimal data with specified private key and algorithm
- * @param alg - signature algorithm name (ex. SHA256withRSA)
- * @param key - private key object
+ * @param sigalg - signature algorithm name (ex. SHA256withRSA)
+ * @param keyobjOrString - key for signing. CryptoKey object, PKCS#8 PEM private key or HMAC hexadecimal key string
  * @param hData - hexadecimal data to be signed
+ * @param saltlen - RSA-PSS salt length when you don't want to use default length
  * @return hexadecimal signature value
  * @see https://developer.mozilla.org/ja/docs/Web/API/SubtleCrypto/sign
+ * @see {@link signBuf}
+ *
  * @example
- * await signHex("SHA256withECDSA", prvkey, "616161") -> "631b3f..."
+ * await signHex("SHA256withECDSA", prvkeyObj, "616161") -> "631b3f..."
  */
-export async function signHex(alg: string, key: CryptoKey, hData: string): Promise<string> {
-  //console.log(key);
-  const keyalgname = key.algorithm.name;
-  const u8aData = new Uint8Array(hextoBA(hData));
-  let param: AlgorithmIdentifier | RsaPssParams | EcdsaParams;
-  if (keyalgname == "RSASSA-PKCS1-v1_5") {
-    param = { name: keyalgname } as AlgorithmIdentifier;
-  } else if (keyalgname == "RSA-PSS") {
-    param = { name: keyalgname, saltLength: 32 } as RsaPssParams;
-  } else { // if (keyalgname == "ECDSA") 
-    param = {
-      name: keyalgname,
-      namedCurve: "P-256",
-      hash: { name: sigAlgToHashAlg(alg) }
-    } as EcdsaParams;
-  } 
-  const abSig = await crypto.subtle.sign(param, key, u8aData);
+export async function signHex(
+  sigalg: SignatureAlgorithmName,
+  keyobjOrString: CryptoKey, 
+  hData: string,
+  saltlen?: number
+): Promise<string> {
+  const abData = hextoArrayBuffer(hData);
+  const abSig = await signBuf(sigalg, keyobjOrString, abData, saltlen);
   return ArrayBuffertohex(abSig);
 }
 
 /**
+ * sign data with specified private key and algorithm
+ * @param sigalg - signature algorithm name (ex. SHA256withRSA)
+ * @param keyobjOrString - key for signing. CryptoKey object, PKCS#8 PEM private key or HMAC hexadecimal key string
+ * @param bufData - data to be signed
+ * @param saltlen - RSA-PSS salt length when you don't want to use default length
+ * @return ArrayBuffer signature value
+ * @see https://developer.mozilla.org/ja/docs/Web/API/SubtleCrypto/sign
+ * @see {@link signHex}
+ *
+ * @example
+ * await signBuf("SHA256withECDSA", prvkeyObj, hextoArrayBuffer("616161")) -> ArrayBuffer...
+ */
+export async function signBuf(
+  sigalg: SignatureAlgorithmName,
+  keyobjOrString: CryptoKey, 
+  bufData: ArrayBuffer | Uint8Array | DataView,
+  saltlen?: number
+): Promise<ArrayBuffer> {
+  let key: CryptoKey;
+  if (typeof keyobjOrString === "string") {
+    const keystr: string = keyobjOrString;
+    if (ishex(keystr) && sigalg.indexOf("hmac") === 0) {
+      key = await getHMACKey(sigalg, keystr);
+    } else {
+      if (keystr.indexOf("-BEGIN PRIVATE KEY") === -1) {
+        throw new Error("PKCS#8 PEM private key shall be specified");
+      }
+      key = await importPEM(keystr, sigalg);
+    }
+  } else {
+    key = keyobjOrString;
+  }
+
+  const keyalgname: string = key.algorithm.name;
+  let param: AlgorithmIdentifier | RsaPssParams | EcdsaParams;
+  if (keyalgname == "RSASSA-PKCS1-v1_5") {
+    param = { name: keyalgname } as AlgorithmIdentifier;
+  } else if (keyalgname == "RSA-PSS") {
+    let len;
+    if (saltlen == undefined) {
+      len = getDefaultSaltLength(sigalg);
+    } else {
+      len = saltlen;
+    }
+    param = { name: keyalgname, saltLength: len } as RsaPssParams;
+  } else if (keyalgname == "ECDSA") {
+    const keyalgobj = key.algorithm as EcKeyImportParams;
+    param = {
+      name: keyalgname,
+      namedCurve: keyalgobj.namedCurve,
+      hash: { name: sigAlgToHashAlg(sigalg) }
+    } as EcdsaParams;
+  } else if (keyalgname == "HMAC") {
+    param = { name: "HMAC" } as AlgorithmIdentifier;
+  } else {
+    throw new Error(`key algorihtm not supported to sign: ${keyalgname}`);
+  }
+
+  return await crypto.subtle.sign(param, key, bufData);
+}
+
+/**
  * verify signature with specified public key, algorithm and data
- * @param alg - signature algorithm name (ex. SHA256withRSA)
- * @param key - public key object
+ * @param sigalg - signature algorithm name (ex. SHA256withRSA)
+ * @param keyobjOrString - key for verification. CryptoKey object, PKCS#8 PEM public key or HMAC hexadecimal key string
  * @param hSig - hexadecimal signature value
  * @param hData - hexadecimal data to be verified
- * @param sigopt - salt length for RSA-PSS or curve name for ECDSA
+ * @param saltlen - RSA-PSS salt length when you don't want to use default length
  * @return true if signature is valid
  * @see https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/verify
+ * @see {@link verifyBuf}
+ *
+ * @description
+ * NOTE1: Generated ECDSA signature value will be a concatinated signature
+ * value of R and S which is compatible to JWS(JSON Web Signatures) or
+ * W3C Web Crypto API. However it doesn't with OpenSSL nor Java
+ * because OpenSSL or Java's ECDSA signature value is an ASN.1 data of R and S.
+ * So you may need to convert signature by {@link sigASN1toRS} function
+ * to verify a OpenSSL EC signature.
+ * <br/>
+ * NOTE2: Regarding to RSA-PSS signature verification, default salt length 
+ * depends on hash algorithm. For SHA1withRSAandMGF1, SHA256withRSAandMGF1,
+ * SHA384withRSAandMGF1 or SHA512withRSAandMGF1, it will be 20, 32, 48 or
+ * 64 respectively.
+ *
  * @example
  * await verifyHex("SHA256withECDSA", pubkey, "91ac...", "616161") -> true
  */
-export async function verifyHex(alg: string, key: CryptoKey, hSig: string, hData: string, sigopt?: number | string): Promise<boolean> {
+export async function verifyHex(
+  sigalg: SignatureAlgorithmName,
+  keyobjOrString: CryptoKey, 
+  hSig: string,
+  hData: string,
+  saltlen?: number
+): Promise<boolean> {
+  const abSig = hextoArrayBuffer(hSig);
+  const abData = hextoArrayBuffer(hData);
+  return await verifyBuf(sigalg, keyobjOrString, abSig, abData, saltlen);
+}
+
+/**
+ * verify signature with specified public key, algorithm and data
+ * @param sigalg - signature algorithm name (ex. SHA256withRSA)
+ * @param keyobjOrString - key for verification. CryptoKey object, PKCS#8 PEM public key or HMAC hexadecimal key string
+ * @param abSig - ArrayBuffer signature value
+ * @param abData - ArrayBuffer data to be verified
+ * @param saltlen - RSA-PSS salt length when you don't want to use default length
+ * @return true if signature is valid
+ * @see https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/verify
+ * @see {@link verifyHex}
+ *
+ * @description
+ * NOTE1: Generated ECDSA signature value will be a concatinated signature
+ * value of R and S which is compatible to JWS(JSON Web Signatures) or
+ * W3C Web Crypto API. However it doesn't with OpenSSL nor Java
+ * because OpenSSL or Java's ECDSA signature value is an ASN.1 data of R and S.
+ * So you may need to convert signature by {@link sigASN1toRS} function
+ * to verify a OpenSSL EC signature.
+ * <br/>
+ * NOTE2: Regarding to RSA-PSS signature verification, default salt length 
+ * depends on hash algorithm. For SHA1withRSAandMGF1, SHA256withRSAandMGF1,
+ * SHA384withRSAandMGF1 or SHA512withRSAandMGF1, it will be 20, 32, 48 or
+ * 64 respectively.
+ *
+ * @example
+ * await verifyBuf("SHA256withECDSA", pubkey, hextoArrayBuffer("91ac..."), hextoArrayBuffer("616161")) -> true
+ */
+export async function verifyBuf(
+  sigalg: SignatureAlgorithmName,
+  keyobjOrString: CryptoKey | string,
+  abSig: ArrayBuffer,
+  abData: ArrayBuffer,
+  saltlen?: number
+): Promise<boolean> {
+  let key: CryptoKey;
+  if (typeof keyobjOrString === "string") {
+    const keystr: string = keyobjOrString;
+    if (ishex(keystr) && sigalg.indexOf("hmac") === 0) {
+      key = await getHMACKey(sigalg, keystr);
+    } else {
+      if (keystr.indexOf("-BEGIN PUBLIC KEY") === -1) {
+        throw new Error("PKCS#8 PEM public key shall be specified");
+      }
+      key = await importPEM(keystr, sigalg);
+    }
+  } else {
+    key = keyobjOrString;
+  }
+
   const keyalgname = key.algorithm.name;
   let param: AlgorithmIdentifier | RsaPssParams | EcdsaParams;
   if (keyalgname == "RSASSA-PKCS1-v1_5") {
     param = { name: keyalgname } as AlgorithmIdentifier;
   } else if (keyalgname == "RSA-PSS") {
     let len;
-    if (sigopt == undefined) {
-      len = getDefaultSaltLength(alg);
+    if (saltlen == undefined) {
+      len = getDefaultSaltLength(sigalg);
     } else {
-      len = sigopt;
+      len = saltlen;
     }
     param = { name: keyalgname, saltLength: len } as RsaPssParams; // , saltLength: 32
-  } else { // keyalgname == "ECDSA"
+  } else if (keyalgname == "ECDSA") {
+    const keyalgobj = key.algorithm as EcKeyImportParams;
     param = {
       name: keyalgname,
-      namedCurve: sigopt,
-      hash: sigAlgToHashAlg(alg)
+      namedCurve: keyalgobj.namedCurve,
+      hash: sigAlgToHashAlg(sigalg)
     } as EcdsaParams;
-  } 
-  const u8aSig = new Uint8Array(hextoBA(hSig));
-  const u8aData = new Uint8Array(hextoBA(hData));
-  return await crypto.subtle.verify(param, key, u8aSig, u8aData);
+  } else if (keyalgname == "HMAC") {
+    param = { name: "HMAC" } as AlgorithmIdentifier;
+  } else {
+    throw new Error(`key algorihtm not supported to verify: ${keyalgname}`);
+  }
+
+  return await crypto.subtle.verify(param, key, abSig, abData);
 }
 
 function getDefaultSaltLength(alg: string) {
@@ -235,7 +376,7 @@ export function sigAlgToHashAlg(alg: string): string | null {
  * @description
  * ECDSA signature value has two types of encoding:
  * - R and S value concatinated encoding used in W3C Web Crypto API or JSON Web Signature.
- * - ASN.1 SEQUENCE of INTEGER R and S value used in OpenSSL
+ * - ASN.1 SEQUENCE of INTEGER R and S value used in OpenSSL or Java
  *
  * This function converts a ECDSA signature encoding from 
  * concatinated to ASN.1. This function supports ECDSA signatures by P-256, P-384 and P-521.
@@ -249,6 +390,7 @@ export function sigAlgToHashAlg(alg: string): string | null {
  *      69c3e2489cc23044f91dce1e5efab7a47f8c2a545cdce9b58e408c6a2aabd060
  *    0220
  *      76ba3d70771c00451adcf608d93f20cc79ccaf872f42028aa05ff57b14e5959f"
+ * // new lines and specs added to understand their structues
  */
 export function sigRStoASN1(hRS: string): string {
   const rslen: number = hRS.length / 2;
@@ -274,7 +416,7 @@ export function sigRStoASN1(hRS: string): string {
  * @description
  * ECDSA signature value has two types of encoding:
  * - R and S value concatinated encoding used in W3C Web Crypto API or JSON Web Signature.
- * - ASN.1 SEQUENCE of INTEGER R and S value used in OpenSSL
+ * - ASN.1 SEQUENCE of INTEGER R and S value used in OpenSSL or Java
  *
  * This function converts a ECDSA signature encoding from 
  * ASN.1 to concatinated. This function supports ECDSA signatures by P-256, P-384 and P-521.
@@ -288,6 +430,7 @@ export function sigRStoASN1(hRS: string): string {
  * ->
  * "69c3e2489cc23044f91dce1e5efab7a47f8c2a545cdce9b58e408c6a2aabd060
  *  76ba3d70771c00451adcf608d93f20cc79ccaf872f42028aa05ff57b14e5959f"
+ * // new lines and specs added to understand their structues
  */
 export function sigASN1toRS(hASN: string, alg?: string): string {
   let hR: string;
@@ -409,50 +552,6 @@ export async function getHMACKey(alg: string, hKey: string): Promise<CryptoKey> 
     ["sign", "verify"]
   );
   return key;  
-}
-
-/**
- * sign hexadecimal data with HMAC
- * @param alg - HMAC algorithm name ("hmacSHA{1,256,384,512}")
- * @param key - CryptoKey object or hexadecimal string of HMAC key
- * @param hData - hexadecimal string data to be signed
- * @return hexadecimal string of HMAC signature
- * @see {@link verifyHMACHex}
- * @example
- * await signHMAXHex("hmacSHA256", "9abf1245...", "616161") -> "7c8ffa..."
- */
-export async function signHMACHex(alg: string, key: string | CryptoKey, hData: string): Promise<string> {
-  const keyobj: CryptoKey
-    = (typeof key == "object") ? key : await getHMACKey(alg, key as string);
-  const sigab: ArrayBuffer = await crypto.subtle.sign(
-    "HMAC",
-    keyobj,
-    hextoArrayBuffer(hData)
-  );
-  return ArrayBuffertohex(sigab);
-}
-
-/**
- * verify HMAC signature
- * @param alg - HMAC algorithm name ("hmacSHA{1,256,384,512}")
- * @param key - CryptoKey object or hexadecimal string of HMAC key
- * @param hSig - hexadecimal string of HMAC signature value
- * @param hData - hexadecimal string of data to be verified
- * @return true if the signature is valid
- * @see {@link signHMACHex}
- * @example
- * await verifyHMACHex("hmacSHA256", "9abf1245...", "7ff2bc...", "616161") -> true
- */
-export async function verifyHMACHex(alg: string, key: string | CryptoKey, hSig: string, hData: string): Promise<boolean> {
-  const keyobj: CryptoKey
-    = (typeof key == "object") ? key : await getHMACKey(alg, key as string);
-  const result = await crypto.subtle.verify(
-    "HMAC",
-    keyobj,
-    hextoArrayBuffer(hSig),
-    hextoArrayBuffer(hData)
-  );
-  return result;
 }
 
 /**

@@ -1,5 +1,19 @@
 # ChangeLog
 
+## [0.4.0] - 2024-05-25
+
+### Added
+
+- function signBuf, verifyBuf
+
+### Modified
+
+- function signHex, verifyHex
+
+### Removed
+
+- function signHMACHex, verifyHMACHex
+
 ## [0.3.0] - 2024-05-22
 
 ### Added

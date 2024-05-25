@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { hashhex, hashutf8, hashrstr, importPEM, signHex, verifyHex, sigAlgToHashAlg, sigASN1toRS, sigRStoASN1, getSecureRandom, getNewHMACKey, getHMACKey, signHMACHex, verifyHMACHex, generateKeypairPEM, generateKeypairJWK, pemtocurve } from "./index.mts";
+import { hashhex, hashutf8, hashrstr, importPEM, signHex, verifyHex, sigAlgToHashAlg, sigASN1toRS, sigRStoASN1, getSecureRandom, getNewHMACKey, getHMACKey, generateKeypairPEM, generateKeypairJWK, pemtocurve } from "./index.mts";
 
 // == hash test ==========
 const AAA256 = "9834876dcfb05cb167a5c24953eba58c4ac89b1adf57f28f2f9d09af107ee8f0"; // =SHA256("aaa")
@@ -234,39 +234,77 @@ test("getHMACKey", async () => {
   expect(key.algorithm.length).toBe(512);
 });
 
-describe("signHMACHex OpenSSL mac command interop", async () => {
+describe("signHex(hmac, hex) OpenSSL mac command interop", async () => {
   test("SHA1", async () => {
-    expect(await signHMACHex("hmacSHA1", HMACKEY1, "616161")).toBe(SIGOSSHS1);
+    expect(await signHex("hmacSHA1", HMACKEY1, "616161")).toBe(SIGOSSHS1);
   });
   test("SHA256", async () => {
-    expect(await signHMACHex("hmacSHA256", HMACKEY1, "616161")).toBe(SIGOSSHS256);
+    expect(await signHex("hmacSHA256", HMACKEY1, "616161")).toBe(SIGOSSHS256);
   });
   test("SHA384", async () => {
-    expect(await signHMACHex("hmacSHA384", HMACKEY1, "616161")).toBe(SIGOSSHS384);
+    expect(await signHex("hmacSHA384", HMACKEY1, "616161")).toBe(SIGOSSHS384);
   });
   test("SHA512", async () => {
-    expect(await signHMACHex("hmacSHA512", HMACKEY1, "616161")).toBe(SIGOSSHS512);
+    expect(await signHex("hmacSHA512", HMACKEY1, "616161")).toBe(SIGOSSHS512);
   });
 });
 
-describe("verifyHMACHex OpenSSL mac command interop", async () => {
+describe("signHex(hmac, keyobj) OpenSSL mac command interop", async () => {
   test("SHA1", async () => {
-    expect(await verifyHMACHex("hmacSHA1", HMACKEY1, SIGOSSHS1, "616161")).toBe(true);
+    const key = await getHMACKey("hmacSHA1", HMACKEY1);
+    expect(await signHex("hmacSHA1", key, "616161")).toBe(SIGOSSHS1);
   });
   test("SHA256", async () => {
-    expect(await verifyHMACHex("hmacSHA256", HMACKEY1, SIGOSSHS256, "616161")).toBe(true);
+    const key = await getHMACKey("hmacSHA256", HMACKEY1);
+    expect(await signHex("hmacSHA256", key, "616161")).toBe(SIGOSSHS256);
   });
   test("SHA384", async () => {
-    expect(await verifyHMACHex("hmacSHA384", HMACKEY1, SIGOSSHS384, "616161")).toBe(true);
+    const key = await getHMACKey("hmacSHA384", HMACKEY1);
+    expect(await signHex("hmacSHA384", key, "616161")).toBe(SIGOSSHS384);
   });
   test("SHA512", async () => {
-    expect(await verifyHMACHex("hmacSHA512", HMACKEY1, SIGOSSHS512, "616161")).toBe(true);
+    const key = await getHMACKey("hmacSHA512", HMACKEY1);
+    expect(await signHex("hmacSHA512", key, "616161")).toBe(SIGOSSHS512);
+  });
+});
+
+describe("verifyHex(hmac, keyobj) OpenSSL mac command interop", async () => {
+  test("SHA1", async () => {
+    const key = await getHMACKey("hmacSHA1", HMACKEY1);
+    expect(await verifyHex("hmacSHA1", key, SIGOSSHS1, "616161")).toBe(true);
+  });
+  test("SHA256", async () => {
+    const key = await getHMACKey("hmacSHA256", HMACKEY1);
+    expect(await verifyHex("hmacSHA256", key, SIGOSSHS256, "616161")).toBe(true);
+  });
+  test("SHA384", async () => {
+    const key = await getHMACKey("hmacSHA384", HMACKEY1);
+    expect(await verifyHex("hmacSHA384", key, SIGOSSHS384, "616161")).toBe(true);
+  });
+  test("SHA512", async () => {
+    const key = await getHMACKey("hmacSHA512", HMACKEY1);
+    expect(await verifyHex("hmacSHA512", key, SIGOSSHS512, "616161")).toBe(true);
+  });
+});
+
+describe("verifyHex(hmac, hex) OpenSSL mac command interop", async () => {
+  test("SHA1", async () => {
+    expect(await verifyHex("hmacSHA1", HMACKEY1, SIGOSSHS1, "616161")).toBe(true);
+  });
+  test("SHA256", async () => {
+    expect(await verifyHex("hmacSHA256", HMACKEY1, SIGOSSHS256, "616161")).toBe(true);
+  });
+  test("SHA384", async () => {
+    expect(await verifyHex("hmacSHA384", HMACKEY1, SIGOSSHS384, "616161")).toBe(true);
+  });
+  test("SHA512", async () => {
+    expect(await verifyHex("hmacSHA512", HMACKEY1, SIGOSSHS512, "616161")).toBe(true);
   });
 });
 
 describe("RFC 7797 sample JWS signature interop", async () => {
   test("4.1 HS256", async () => {
-    expect(await verifyHMACHex("hmacSHA256", "0323354b2b0fa5bc837e0665777ba68f5ab328e6f054c928a90f84b2d2502ebfd3fb5a92d20647ef968ab4c377623d223d2e2172052e4f08c0cd9af567d080a3", "e66bdf3aba0bfa0ec7caa268a337a19ac6aa9af4d8184ab98d3235815be81284", "65794a68624763694f694a49557a49314e694a392e4a4334774d67")).toBe(true);
+    expect(await verifyHex("hmacSHA256", "0323354b2b0fa5bc837e0665777ba68f5ab328e6f054c928a90f84b2d2502ebfd3fb5a92d20647ef968ab4c377623d223d2e2172052e4f08c0cd9af567d080a3", "e66bdf3aba0bfa0ec7caa268a337a19ac6aa9af4d8184ab98d3235815be81284", "65794a68624763694f694a49557a49314e694a392e4a4334774d67")).toBe(true);
   });
 });
 
