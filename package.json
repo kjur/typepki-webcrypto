@@ -1,6 +1,6 @@
 {
   "name": "typepki-webcrypto",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "author": "Kenji Urushima <kenji.urushima@gmail.com>",
   "description": "W3C Web Crypto API helper function sub module for TypePKI library (beta)",
   "homepage": "https://kjur.github.io/typepki-webcrypto",
@@ -75,7 +75,7 @@
   },
   "dependencies": {
     "typepki-asn1gen": "^0.1.0",
-    "typepki-asn1parse": "^0.4.0",
+    "typepki-asn1parse": "^0.7.1",
     "typepki-strconv": "^0.4.0"
   }
 }
