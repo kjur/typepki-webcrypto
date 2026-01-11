@@ -1,6 +1,7 @@
 import { aryval, hextoBA, rstrtohex, utf8tohex, ArrayBuffertohex, hextoArrayBuffer, pemtohex, ishex, hextopem } from "typepki-strconv";
 import { getASN1, pospad } from "typepki-asn1gen";
 import { asn1parse, dig, asn1oidcanon } from "typepki-asn1parse";
+import { certtopkcs8pem } from "typepki-x509parse";
 
 export type SignatureAlgorithmName = 
   "hmacSHA1" | "hmacSHA256" | "hmacSHA384" | "hmacSHA512" |
@@ -148,9 +149,9 @@ export async function signBuf(
 }
 
 /**
- * verify signature with specified public key, algorithm and data
+ * verify hexadecimal sgnature and data string with algorithm and public key or certificate
  * @param sigalg - signature algorithm name (ex. SHA256withRSA)
- * @param keyobjOrString - key for verification. CryptoKey object, PKCS#8 PEM public key or HMAC hexadecimal key string
+ * @param keyobjOrString - key for verification. CryptoKey object, PEM certificate, PKCS#8 PEM public key or HMAC hexadecimal key string
  * @param hSig - hexadecimal signature value
  * @param hData - hexadecimal data to be verified
  * @param saltlen - RSA-PSS salt length when you don't want to use default length
@@ -170,9 +171,13 @@ export async function signBuf(
  * depends on hash algorithm. For SHA1withRSAandMGF1, SHA256withRSAandMGF1,
  * SHA384withRSAandMGF1 or SHA512withRSAandMGF1, it will be 20, 32, 48 or
  * 64 respectively.
+ * <br/>
+ * NOTE3: PEM certificate supported since 0.5.0.
  *
  * @example
- * await verifyHex("SHA256withECDSA", pubkey, "91ac...", "616161") -> true
+ * await verifyHex("SHA256withECDSA", cryptoKeyPubObj, "91ac...", "616161") -> true
+ * await verifyHex("SHA256withECDSA", PKCS8PUBPEM, "91ac...", "616161") -> true
+ * await verifyHex("SHA256withECDSA", CERTPEM, "91ac...", "616161") -> true
  */
 export async function verifyHex(
   sigalg: SignatureAlgorithmName,
@@ -187,9 +192,9 @@ export async function verifyHex(
 }
 
 /**
- * verify signature with specified public key, algorithm and data
+ * verify ArrayBuffer signature and data with algorithm and public key or certificate
  * @param sigalg - signature algorithm name (ex. SHA256withRSA)
- * @param keyobjOrString - key for verification. CryptoKey object, PKCS#8 PEM public key or HMAC hexadecimal key string
+ * @param keyobjOrString - key for verification. CryptoKey object, PEM certificate, PKCS#8 PEM public key or HMAC hexadecimal key string
  * @param abSig - ArrayBuffer signature value
  * @param abData - ArrayBuffer data to be verified
  * @param saltlen - RSA-PSS salt length when you don't want to use default length
@@ -209,9 +214,15 @@ export async function verifyHex(
  * depends on hash algorithm. For SHA1withRSAandMGF1, SHA256withRSAandMGF1,
  * SHA384withRSAandMGF1 or SHA512withRSAandMGF1, it will be 20, 32, 48 or
  * 64 respectively.
+ * <br/>
+ * NOTE3: PEM certificate supported since 0.5.0.
  *
  * @example
- * await verifyBuf("SHA256withECDSA", pubkey, hextoArrayBuffer("91ac..."), hextoArrayBuffer("616161")) -> true
+ * abSig = hextoArrayBuffer("91ac...");
+ * abData = hextoArrayBuffer("616161"));
+ * await verifyBuf("SHA256withECDSA", cryptoKeyPubObj, abSig, abData -> true
+ * await verifyBuf("SHA256withECDSA", PKCS8PUBPEM, abSig, abData -> true
+ * await verifyBuf("SHA256withECDSA", CERTPEM, abSig, abData -> true
  */
 export async function verifyBuf(
   sigalg: SignatureAlgorithmName,
@@ -226,8 +237,9 @@ export async function verifyBuf(
     if (ishex(keystr) && sigalg.indexOf("hmac") === 0) {
       key = await getHMACKey(sigalg, keystr);
     } else {
-      if (keystr.indexOf("-BEGIN PUBLIC KEY") === -1) {
-        throw new Error("PKCS#8 PEM public key shall be specified");
+      if (keystr.indexOf("-BEGIN PUBLIC KEY") === -1 &&
+	  keystr.indexOf("-BEGIN CERTIFICATE") === -1) {
+	throw new Error("PKCS#8 PEM public key or certificate shall be specified");
       }
       key = await importPEM(keystr, sigalg);
     }
@@ -280,32 +292,41 @@ function getDefaultSaltLength(alg: string) {
 
 // == import PEM private/public key ===========================
 /**
- * import key from PEM private/public key string
- * @param pem - PEM PKCS#8 private key or public key string
+ * import key from PEM private/public key or certificate string
+ * @param pem - PEM PKCS#8 private key, public key string or PEM certificate
  * @param alg - signature algorithm (SHA{1,224,256,384,512}with{RSA,RSAandMGF1,ECDSA})
  * @param sigopt - saltLength for RSA-PSS
  * @return CryptoKey object of W3C Web Crypto API
  * @see https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/importKey
  *
  * @description
- * This function import a CryptoKey object from PEM key file.
+ * This function import a CryptoKey object from PEM public key,
+ * private key or certificate string.
  * <br/>
- * NOTE: For EC key, namedCurve value will be automatically
+ * NOTE1: For EC key, namedCurve value will be automatically
  * detected by PEM file. So no need to specify.
+ * <br/>
+ * NOTE2: Importing a PEM certificate is supported since 0.5.0.
  *
  * @example
- * key = await importPEM("-----BEGIN PRIVATE...", "SHA256withRSA");
- * key = await importPEM("-----BEGIN PUBLIC...", "SHA256withECDSA");
- * key = await importPEM("-----BEGIN PRIVATE...", "SHA256withRSAandMGF1");
+ * prvkey = await importPEM("-----BEGIN PRIVATE...", "SHA256withRSA");
+ * prvkey = await importPEM("-----BEGIN PRIVATE...", "SHA256withRSAandMGF1");
+ * pubkey = await importPEM("-----BEGIN PUBLIC...", "SHA256withECDSA");
+ * pubkey = await importPEM("-----BEGIN CERTIFICATE...", "SHA256withECDSA");
  */
 export async function importPEM(pem: string, alg: string, sigopt?: number | string): Promise<CryptoKey> {
-  const pemab: ArrayBuffer = hextoArrayBuffer(pemtohex(pem));
-  const format: "pkcs8" | "spki" = getImportFormat(pem);
+  let pem2: string = pem;
+  if (pem.indexOf("-----BEGIN CERTIFICATE") != -1) {
+    pem2 = certtopkcs8pem(pem);
+  }
+
+  const pemab: ArrayBuffer = hextoArrayBuffer(pemtohex(pem2));
+  const format: "pkcs8" | "spki" = getImportFormat(pem2);
   if (format == "pkcs8") {
     const key = await crypto.subtle.importKey(
       "pkcs8",
       pemab,
-      getImportAlgorithm(pem, alg, sigopt),
+      getImportAlgorithm(pem2, alg, sigopt),
       true,
       ["sign"]
     );
@@ -314,7 +335,7 @@ export async function importPEM(pem: string, alg: string, sigopt?: number | stri
     const key = await crypto.subtle.importKey(
       "spki",
       pemab,
-      getImportAlgorithm(pem, alg, sigopt),
+      getImportAlgorithm(pem2, alg, sigopt),
       true,
       ["verify"]
     );

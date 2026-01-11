@@ -4,28 +4,19 @@ import { hashhex, hashutf8, hashrstr, importPEM, signHex, verifyHex, sigAlgToHas
 // == hash test ==========
 const AAA256 = "9834876dcfb05cb167a5c24953eba58c4ac89b1adf57f28f2f9d09af107ee8f0"; // =SHA256("aaa")
 
-test("hashex", async () => {
-  expect(await hashhex("SHA-256", "616161")).toBe(AAA256);
-});
-
-test("hashrstr", async () => {
-  expect(await hashrstr("SHA-256", "aaa")).toBe(AAA256);
-});
-
-test("hashutf8", async () => {
-  expect(await hashutf8("SHA-256", "aaa")).toBe(AAA256);
+describe("hash test", async () => {
+  test("hashex", async () => {
+    expect(await hashhex("SHA-256", "616161")).toBe(AAA256);
+  });
+  test("hashrstr", async () => {
+    expect(await hashrstr("SHA-256", "aaa")).toBe(AAA256);
+  });
+  test("hashutf8", async () => {
+    expect(await hashutf8("SHA-256", "aaa")).toBe(AAA256);
+  });
 });
 
 // == importpem test ==========
-
-test("importPEM RSA private1", async () => {
-  const key = await importPEM(PRVR1024, "SHA256withRSA");
-  expect(key.type).toBe("private");
-  expect(key.algorithm.name).toBe("RSASSA-PKCS1-v1_5");
-  expect(key.algorithm.modulusLength).toBe(1024);
-  expect(key.algorithm.hash).toEqual({name:"SHA-256"});
-  expect(key.usages).toEqual(["sign"]);
-});
 
 const SIGAAARSA1024 = "01b85ed1b6669b4d43082521d7b7db481a5ac75016792e2465de6ffb0426bdb85774ebf848f739f79b42c4d584b99dd8c5242479ae19d2a50cf5dee9a854ae56560faf83200c377d131fd983b6219ef4be2b00215b261d3619e73d641afb23892238a51744e2384ec5a7b33072b5b5704a12f9076559f7a7e6858c73c78c3104";
 test("signHex", async () => {
@@ -40,79 +31,108 @@ test("signHex", async () => {
   //console.log(hSig2);
 });
 
-test("importPEM RSA public1", async () => {
-  const key = await importPEM(PUBR1024, "SHA256withRSA");
-  expect(key.type).toBe("public");
-  expect(key.algorithm.name).toBe("RSASSA-PKCS1-v1_5");
-  expect(key.algorithm.modulusLength).toBe(1024);
-  expect(key.algorithm.hash).toEqual({name:"SHA-256"});
-  expect(key.usages).toEqual(["verify"]);
-});
+describe("importPEM test", async () => {
+  test("importPEM RSA private1", async () => {
+    const key = await importPEM(PRVR1024, "SHA256withRSA");
+    expect(key.type).toBe("private");
+    expect(key.algorithm.name).toBe("RSASSA-PKCS1-v1_5");
+    expect(key.algorithm.modulusLength).toBe(1024);
+    expect(key.algorithm.hash).toEqual({name:"SHA-256"});
+    expect(key.usages).toEqual(["sign"]);
+  });
+  test("importPEM RSA public1", async () => {
+    const key = await importPEM(PUBR1024, "SHA256withRSA");
+    expect(key.type).toBe("public");
+    expect(key.algorithm.name).toBe("RSASSA-PKCS1-v1_5");
+    expect(key.algorithm.modulusLength).toBe(1024);
+    expect(key.algorithm.hash).toEqual({name:"SHA-256"});
+    expect(key.usages).toEqual(["verify"]);
+  });
+  test("importPEM RSAPSS private1", async () => {
+    const key = await importPEM(PRVR1024, "SHA256withRSAandMGF1");
+    expect(key.type).toBe("private");
+    expect(key.algorithm.name).toBe("RSA-PSS");
+    expect(key.algorithm.modulusLength).toBe(1024);
+    expect(key.algorithm.hash).toEqual({name:"SHA-256"});
+    expect(key.usages).toEqual(["sign"]);
+  });
+  test("importPEM RSA public1 various hash alg SHA-1/224/256/384/512", async () => {
+    let key = await importPEM(PUBR1024, "SHA1withRSA");
+    expect(key.algorithm.hash).toEqual({name:"SHA-1"});
+    key = await importPEM(PUBR1024, "SHA224withRSA");
+    expect(key.algorithm.hash).toEqual({name:"SHA-224"});
+    key = await importPEM(PUBR1024, "SHA256withRSA");
+    expect(key.algorithm.hash).toEqual({name:"SHA-256"});
+    key = await importPEM(PUBR1024, "SHA384withRSA");
+    expect(key.algorithm.hash).toEqual({name:"SHA-384"});
+    key = await importPEM(PUBR1024, "SHA512withRSA");
+    expect(key.algorithm.hash).toEqual({name:"SHA-512"});
+  });
+  test("importPEM EC P-256 private1", async () => {
+    const key = await importPEM(PRVECP2, "SHA256withECDSA");
+    expect(key.type).toBe("private");
+    expect(key.algorithm.name).toBe("ECDSA");
+    expect(key.algorithm.namedCurve).toBe("P-256");
+    expect(key.usages).toEqual(["sign"]);
+  });
+  test("importPEM EC P-256 public PKCS8PEM", async () => {
+    const key = await importPEM(PUBECP2, "SHA256withECDSA");
+    expect(key.type).toBe("public");
+    expect(key.algorithm.name).toBe("ECDSA");
+    expect(key.algorithm.namedCurve).toBe("P-256");
+    expect(key.usages).toEqual(["verify"]);
+  });
+  test("importPEM EC P-256 public selfsigned CERT", async () => {
+    const key = await importPEM(CRTECP2, "SHA256withECDSA");
+    expect(key.type).toBe("public");
+    expect(key.algorithm.name).toBe("ECDSA");
+    expect(key.algorithm.namedCurve).toBe("P-256");
+    expect(key.usages).toEqual(["verify"]);
+  });
+}); // "importPEM test" END
 
-test("importPEM RSAPSS private1", async () => {
-  const key = await importPEM(PRVR1024, "SHA256withRSAandMGF1");
-  expect(key.type).toBe("private");
-  expect(key.algorithm.name).toBe("RSA-PSS");
-  expect(key.algorithm.modulusLength).toBe(1024);
-  expect(key.algorithm.hash).toEqual({name:"SHA-256"});
-  expect(key.usages).toEqual(["sign"]);
-});
+describe("signHex and verifyHex test", async () => {
+  test("signHex verifyHex RSA", async () => {
+    const hData = "616161";
+    const prvkey = await importPEM(PRVR1024, "SHA256withRSA");
+    const hSig = await signHex("SHA256withRSA", prvkey, hData);
 
-test("importPEM RSA public1 various hash alg SHA-1/224/256/384/512", async () => {
-  let key = await importPEM(PUBR1024, "SHA1withRSA");
-  expect(key.algorithm.hash).toEqual({name:"SHA-1"});
-  key = await importPEM(PUBR1024, "SHA224withRSA");
-  expect(key.algorithm.hash).toEqual({name:"SHA-224"});
-  key = await importPEM(PUBR1024, "SHA256withRSA");
-  expect(key.algorithm.hash).toEqual({name:"SHA-256"});
-  key = await importPEM(PUBR1024, "SHA384withRSA");
-  expect(key.algorithm.hash).toEqual({name:"SHA-384"});
-  key = await importPEM(PUBR1024, "SHA512withRSA");
-  expect(key.algorithm.hash).toEqual({name:"SHA-512"});
-});
+    const pubkey = await importPEM(PUBR1024, "SHA256withRSA");
+    expect(await verifyHex("SHA256withRSA", pubkey, hSig, hData)).toBe(true);
+  });
+  test("signHex verifyHex RSA-PSS", async () => {
+    const hData = "616161";
+    const prvkey = await importPEM(PRVR1024, "SHA256withRSAandMGF1");
+    const hSig = await signHex("SHA256withRSAandMGF1", prvkey, hData);
 
-test("importPEM EC P-256 private1", async () => {
-  const key = await importPEM(PRVECP2, "SHA256withECDSA");
-  expect(key.type).toBe("private");
-  expect(key.algorithm.name).toBe("ECDSA");
-  expect(key.algorithm.namedCurve).toBe("P-256");
-  expect(key.usages).toEqual(["sign"]);
-});
+    const pubkey = await importPEM(PUBR1024, "SHA256withRSAandMGF1");
+    expect(await verifyHex("SHA256withRSAandMGF1", pubkey, hSig, hData)).toBe(true);
+  });
+  test("signHex verifyHex EC P-256", async () => {
+    const hData = "616161";
+    const prvkey = await importPEM(PRVECP2, "SHA256withECDSA");
+    const hSig = await signHex("SHA256withECDSA", prvkey, hData, "P-256");
+    
+    const pubkey = await importPEM(PUBECP2, "SHA256withECDSA");
+    expect(await verifyHex("SHA256withECDSA", pubkey, hSig, hData, "P-256")).toBe(true);
+    
+    const pubkey2 = await importPEM(CRTECP2, "SHA256withECDSA");
+    expect(await verifyHex("SHA256withECDSA", pubkey2, hSig, hData, "P-256")).toBe(true);
+  });
+  test("signHex verifyHex EC P-256 PKCS8PEM", async () => {
+    const hData = "616161";
+    const prvkey = await importPEM(PRVECP2, "SHA256withECDSA");
+    const hSig = await signHex("SHA256withECDSA", prvkey, hData, "P-256");
 
-test("importPEM EC P-256 public1", async () => {
-  const key = await importPEM(PUBECP2, "SHA256withECDSA");
-  expect(key.type).toBe("public");
-  expect(key.algorithm.name).toBe("ECDSA");
-  expect(key.algorithm.namedCurve).toBe("P-256");
-  expect(key.usages).toEqual(["verify"]);
-});
-
-test("signHex verifyHex RSA", async () => {
-  const hData = "616161";
-  const prvkey = await importPEM(PRVR1024, "SHA256withRSA");
-  const hSig = await signHex("SHA256withRSA", prvkey, hData);
-
-  const pubkey = await importPEM(PUBR1024, "SHA256withRSA");
-  expect(await verifyHex("SHA256withRSA", pubkey, hSig, hData)).toBe(true);
-});
-
-test("signHex verifyHex RSA-PSS", async () => {
-  const hData = "616161";
-  const prvkey = await importPEM(PRVR1024, "SHA256withRSAandMGF1");
-  const hSig = await signHex("SHA256withRSAandMGF1", prvkey, hData);
-
-  const pubkey = await importPEM(PUBR1024, "SHA256withRSAandMGF1");
-  expect(await verifyHex("SHA256withRSAandMGF1", pubkey, hSig, hData)).toBe(true);
-});
-
-test("signHex verifyHex EC P-256", async () => {
-  const hData = "616161";
-  const prvkey = await importPEM(PRVECP2, "SHA256withECDSA");
-  const hSig = await signHex("SHA256withECDSA", prvkey, hData, "P-256");
-
-  const pubkey = await importPEM(PUBECP2, "SHA256withECDSA");
-  expect(await verifyHex("SHA256withECDSA", pubkey, hSig, hData, "P-256")).toBe(true);
-});
+    expect(await verifyHex("SHA256withECDSA", PUBECP2, hSig, hData, "P-256")).toBe(true);
+  });
+  test("signHex verifyHex EC P-256 CERTPEM", async () => {
+    const hData = "616161";
+    const prvkey = await importPEM(PRVECP2, "SHA256withECDSA");
+    const hSig = await signHex("SHA256withECDSA", prvkey, hData, "P-256");
+    expect(await verifyHex("SHA256withECDSA", CRTECP2, hSig, hData, "P-256")).toBe(true);
+  });
+}); // "signHex and verifyHex test" END
 
 test("sigAlgToHashAlg", () => {
   expect(sigAlgToHashAlg("SHA1withRSA")).toBe("SHA-1");
@@ -137,7 +157,17 @@ describe("verifyHex jwt.io generated signatures interop", async () => {
   });
 });
 
-describe("verifyHex OpenSSL generated signatures interop", async () => {
+describe("verifyHex PEM", async () => {
+  const hSig = "1a5c6d313573cfde6a38a19528b04ad503d82ae6d25e15cc8a5879bd1780b2a4292625ea13210dd1d8088f85570e45a9a571c2075f07f452e91e56da743c9093";
+  test("SHA256withECDSA P-256 PKCSPUBPEM", async () => {
+    expect(await verifyHex("SHA256withECDSA", PUBECP2, hSig, AAAHEX, "P-256")).toBe(true);
+  });
+  test("SHA256withECDSA P-256 CERTPEM", async () => {
+    expect(await verifyHex("SHA256withECDSA", CRTECP2, hSig, AAAHEX, "P-256")).toBe(true);
+  });
+});
+
+describe("verifyHex OpenSSL generated signatures interop+importPEM", async () => {
   test("SHA256withRSA 1024", async () => {
     const pubR1024 = await importPEM(PUBR1024, "SHA256withRSA");
     expect(await verifyHex("SHA256withRSA", pubR1024, SIGOSSR1024, AAAHEX)).toBe(true);
@@ -307,7 +337,6 @@ describe("RFC 7797 sample JWS signature interop", async () => {
     expect(await verifyHex("hmacSHA256", "0323354b2b0fa5bc837e0665777ba68f5ab328e6f054c928a90f84b2d2502ebfd3fb5a92d20647ef968ab4c377623d223d2e2172052e4f08c0cd9af567d080a3", "e66bdf3aba0bfa0ec7caa268a337a19ac6aa9af4d8184ab98d3235815be81284", "65794a68624763694f694a49557a49314e694a392e4a4334774d67")).toBe(true);
   });
 });
-
 
 // test data =============================================================
 const AAAHEX = "616161";
@@ -504,6 +533,20 @@ const PUBECP2 = `-----BEGIN PUBLIC KEY-----
 MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEQiVI+I+3gv+17KN0RFLHKh5Vj71v
 c75eSOkyMsxFxbFsTNEMTLjVuKFxOelIgsiZJXKZNCX0FBmrfpCkKklCcg==
 -----END PUBLIC KEY-----`;
+
+// RFC 9500 test EC P-256 selfsigned cert rfc9500testkey/testecp256.self.es-256.pem
+const CRTECP2 = `-----BEGIN CERTIFICATE-----
+MIIBjDCCATKgAwIBAgIBATAKBggqhkjOPQQDAjAlMQswCQYDVQQGEwJKUDEWMBQG
+A1UECgwNVC1QMjU2LUVTLTI1NjAeFw0yNDA2MTQxNTA3MDRaFw00OTA2MDgxNTA3
+MDRaMCUxCzAJBgNVBAYTAkpQMRYwFAYDVQQKDA1ULVAyNTYtRVMtMjU2MFkwEwYH
+KoZIzj0CAQYIKoZIzj0DAQcDQgAEQiVI+I+3gv+17KN0RFLHKh5Vj71vc75eSOky
+MsxFxbFsTNEMTLjVuKFxOelIgsiZJXKZNCX0FBmrfpCkKklCcqNTMFEwHQYDVR0O
+BBYEFFtwp5gX95/2N9L349xEbCEJ17vUMB8GA1UdIwQYMBaAFFtwp5gX95/2N9L3
+49xEbCEJ17vUMA8GA1UdEwEB/wQFMAMBAf8wCgYIKoZIzj0EAwIDSAAwRQIgU5Mf
+rOhCJABzvwHRZb7WSm12+6Jb26Gp/KHRQkOF5oICIQCJVSuuc5D3oD2Wch5PK0pE
+/U2kVuXyh/wuO/l9huhfGQ==
+-----END CERTIFICATE-----
+`;
 
 // RFC 9500 test EC P-384 private PKCS#8 PEM
 const PRVECP3 = `-----BEGIN PRIVATE KEY-----
